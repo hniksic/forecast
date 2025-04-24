@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+
+import argparse, re, sys, requests, datetime, pytz
+
+def get_weather_forecast(latitude, longitude, requested_date, model):
+    params = {
+        'latitude': latitude,
+        'longitude': longitude,
+        'hourly': 'temperature_2m,precipitation',
+        'model': model,
+        'forecast_days': 16
+    }
+
+    response = requests.get('https://api.open-meteo.com/v1/forecast', params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    times = data['hourly']['time']
+    temperatures = data['hourly']['temperature_2m']
+    precipitations = data['hourly']['precipitation']
+
+    local_tz = datetime.datetime.now().astimezone().tzinfo
+
+    for time, temp, precip in zip(times, temperatures, precipitations):
+        time_dt = datetime.datetime.fromisoformat(time + '+00:00')
+        time_local = time_dt.astimezone(local_tz)
+        if time_local.date() == requested_date:
+            tm = time_local.strftime('%H:%M')
+            print(f"{tm} {temp} {precip}")
+
+def resolve_place(s):
+    if mtch := re.fullmatch(r"(-?\d+\.\d+),(-?\d+\.\d+)", s):
+        return s, float(mtch.group(1)), float(mtch.group(2))
+    response = requests.get('https://nominatim.openstreetmap.org/search.php',
+                            params={'city': s, 'format': 'jsonv2'},
+                            headers={'User-Agent': 'curl/8.9.1'})
+    response.raise_for_status()
+    places = response.json()
+    if not places:
+        raise ValueError("unknown place")
+    place = places[0]
+    return place['display_name'], float(place['lat']), float(place['lon'])
+
+def parse_date(s):
+    if s == "today":
+        return datetime.date.today()
+    if s == "tomorrow":
+        return datetime.date.today() + datetime.timedelta(1)
+    return datetime.datetime.strptime(s, '%Y-%m-%d').date()
+
+def main():
+    parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and date.")
+    parser.add_argument('place', help="Named location or lat,long pair")
+    parser.add_argument('date', help="Date for the forecast in YYYY-MM-DD format, or 'today' or 'tomorrow'")
+    parser.add_argument('--model', default='graphcast', help="Forecast model to use")
+    args = parser.parse_args()
+
+    place_name, latitude, longitude = resolve_place(args.place)
+    date = parse_date(args.date)
+
+    if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+        print("Error: Latitude must be between -90 and 90, longitude between -180 and 180.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"{args.model} forecast for {place_name} on {date}:")
+    get_weather_forecast(latitude, longitude, date, args.model)
+
+if __name__ == "__main__":
+    main()
