@@ -18,13 +18,13 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
     times = data['hourly']['time']
     temperatures = data['hourly']['temperature_2m']
     precipitations = data['hourly']['precipitation']
+    assert data["timezone"] == "GMT"
 
-    local_tz = datetime.datetime.now().astimezone().tzinfo
-
+    now = datetime.datetime.now(datetime.timezone.utc).astimezone()
     for time, temp, precip in zip(times, temperatures, precipitations):
-        time_dt = datetime.datetime.fromisoformat(time + '+00:00')
-        time_local = time_dt.astimezone(local_tz)
-        if time_local.date() == requested_date:
+        time_gmt = datetime.datetime.fromisoformat(time).replace(tzinfo=datetime.timezone.utc)
+        time_local = time_gmt.astimezone()
+        if time_local.date() == requested_date and time_local > now:
             tm = time_local.strftime('%H:%M')
             print(f"{tm} {temp} {precip}")
 
