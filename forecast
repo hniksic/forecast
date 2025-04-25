@@ -26,6 +26,8 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
     out_temps = []
     out_precips = []
     for time, temp, precip in zip(times, temperatures, precipitations):
+        if temp is None:
+            continue # stepped outside the forecast
         time_gmt = datetime.datetime.fromisoformat(time).replace(tzinfo=datetime.timezone.utc)
         time_local = time_gmt.astimezone()
         if time_local.date() == requested_date and time_local > now:
