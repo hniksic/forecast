@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse, re, sys, requests, datetime, pytz
+from itertools import chain
 
 def get_weather_forecast(latitude, longitude, requested_date, model):
     params = {
@@ -21,12 +22,29 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
     assert data["timezone"] == "GMT"
 
     now = datetime.datetime.now(datetime.timezone.utc).astimezone()
+    out_times = []
+    out_temps = []
+    out_precips = []
     for time, temp, precip in zip(times, temperatures, precipitations):
         time_gmt = datetime.datetime.fromisoformat(time).replace(tzinfo=datetime.timezone.utc)
         time_local = time_gmt.astimezone()
         if time_local.date() == requested_date and time_local > now:
-            tm = time_local.strftime('%H:%M')
-            print(f"{tm} {temp} {precip}")
+            out_times.append(time_local)
+            out_temps.append(temp)
+            out_precips.append(precip)
+    return out_times, out_temps, out_precips
+
+def pretty_print(headers, *data):
+    data_widths = [max(len(str(n)) for n in chain(column, [''])) for column in data]
+    header_widths = [len(h) for h in headers]
+    widths = [max(hw, dw) for hw, dw in zip(data_widths, header_widths)]
+    for width, header in zip(widths, headers):
+        print(f"{header:<{width}} ", end='')
+    print()
+    for row in zip(*data):
+        for width, n in zip(widths, row):
+            print(f"{str(n):>{width}} ", end='')
+        print()
 
 def resolve_place(s):
     if mtch := re.fullmatch(r"(-?\d+\.\d+),(-?\d+\.\d+)", s):
@@ -61,8 +79,15 @@ def main():
     place_name, latitude, longitude = resolve_place(args.place)
     date = parse_date(args.date)
 
-    print(f"{args.model} forecast for {place_name} on {date}:")
-    get_weather_forecast(latitude, longitude, date, args.model)
+    print(f"{args.model} forecast for {place_name}")
+    times, temps, precips = get_weather_forecast(latitude, longitude, date, args.model)
+    pretty_print(
+        ["Date", "Hour", "Temp[°C]", "Rain[mm]"],
+        [dt.date() if i == 0 else '' for (i, dt) in enumerate(times)],
+        [dt.strftime('%H:%M') for dt in times],
+        temps,
+        list(map("{:g}".format, precips))
+    )
 
 if __name__ == "__main__":
     main()
