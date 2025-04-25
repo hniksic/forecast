@@ -30,7 +30,10 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
 
 def resolve_place(s):
     if mtch := re.fullmatch(r"(-?\d+\.\d+),(-?\d+\.\d+)", s):
-        return s, float(mtch.group(1)), float(mtch.group(2))
+        latitude, longitude = float(mtch.group(1)), float(mtch.group(2))
+        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            raise ValueError("Latitude must be between -90 and 90, longitude between -180 and 180")
+        return s, latitude, longitude
     response = requests.get('https://nominatim.openstreetmap.org/search.php',
                             params={'q': s, 'format': 'jsonv2'},
                             headers={'User-Agent': 'curl/8.9.1'})
@@ -57,10 +60,6 @@ def main():
 
     place_name, latitude, longitude = resolve_place(args.place)
     date = parse_date(args.date)
-
-    if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
-        print("Error: Latitude must be between -90 and 90, longitude between -180 and 180.", file=sys.stderr)
-        sys.exit(1)
 
     print(f"{args.model} forecast for {place_name} on {date}:")
     get_weather_forecast(latitude, longitude, date, args.model)
