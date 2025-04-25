@@ -74,7 +74,7 @@ def parse_date(s):
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and date.")
     parser.add_argument('place', help="Named location or lat,long pair")
-    parser.add_argument('date', help="Date for the forecast in YYYY-MM-DD format, or 'today' or 'tomorrow'")
+    parser.add_argument('date', nargs='?', default='today', help="Date for the forecast in YYYY-MM-DD format, or 'today' or 'tomorrow'")
     parser.add_argument('--model', default='gfs_graphcast025', help="Forecast model to use - e.g. gfs_graphcast025, icon_eu, ecmwf_ifs025")
     args = parser.parse_args()
 
