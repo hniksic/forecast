@@ -32,7 +32,7 @@ def resolve_place(s):
     if mtch := re.fullmatch(r"(-?\d+\.\d+),(-?\d+\.\d+)", s):
         return s, float(mtch.group(1)), float(mtch.group(2))
     response = requests.get('https://nominatim.openstreetmap.org/search.php',
-                            params={'city': s, 'format': 'jsonv2'},
+                            params={'q': s, 'format': 'jsonv2'},
                             headers={'User-Agent': 'curl/8.9.1'})
     response.raise_for_status()
     places = response.json()
