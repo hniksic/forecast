@@ -9,7 +9,8 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
         'longitude': longitude,
         'hourly': 'temperature_2m,precipitation',
         'models': model,
-        'forecast_days': 16
+        'forecast_days': 16,
+        'timezone': 'auto',
     }
 
     response = requests.get('https://api.open-meteo.com/v1/forecast', params=params)
@@ -19,19 +20,23 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
     times = data['hourly']['time']
     temperatures = data['hourly']['temperature_2m']
     precipitations = data['hourly']['precipitation']
-    assert data["timezone"] == "GMT"
 
-    now = datetime.datetime.now(datetime.timezone.utc).astimezone()
+    timezone = pytz.timezone(data['timezone'])
+    now = datetime.datetime.now(timezone)
+    if requested_date == "today":
+        requested_date = now.date()
+    elif requested_date == "tomorrow":
+        requested_date = now.date() + datetime.timedelta(1)
+
     out_times = []
     out_temps = []
     out_precips = []
     for time, temp, precip in zip(times, temperatures, precipitations):
         if temp is None:
             continue # stepped outside the forecast
-        time_gmt = datetime.datetime.fromisoformat(time).replace(tzinfo=datetime.timezone.utc)
-        time_local = time_gmt.astimezone()
-        if time_local.date() == requested_date and time_local > now:
-            out_times.append(time_local)
+        tm = timezone.localize(datetime.datetime.fromisoformat(time))
+        if tm.date() == requested_date and tm > now:
+            out_times.append(tm)
             out_temps.append(temp)
             out_precips.append(precip)
     return out_times, out_temps, out_precips
@@ -65,10 +70,8 @@ def resolve_place(s):
     return place['display_name'], float(place['lat']), float(place['lon'])
 
 def parse_date(s):
-    if s == "today":
-        return datetime.date.today()
-    if s == "tomorrow":
-        return datetime.date.today() + datetime.timedelta(1)
+    if s in ("today", "tomorrow"):
+        return s
     return datetime.datetime.strptime(s, '%Y-%m-%d').date()
 
 def main():
