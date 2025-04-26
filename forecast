@@ -16,10 +16,14 @@ def download_forecast(latitude, longitude, models):
     response.raise_for_status()
     data = response.json()
 
+    propname = lambda prop, model: prop if len(models) == 1 else f'{prop}_{model}'
+    for model in models:
+        assert data['hourly_units'][propname('temperature_2m', model)] == '°C'
+        assert data['hourly_units'][propname('precipitation', model)] == 'mm'
+
     timezone = pytz.timezone(data['timezone'])
     times = [timezone.localize(datetime.datetime.fromisoformat(time)) for time in data['hourly']['time']]
 
-    propname = lambda prop, model: prop if len(models) == 1 else f'{prop}_{model}'
     forecast = {
         model: (data['hourly'][propname('temperature_2m', model)],
                 data['hourly'][propname('precipitation', model)])
