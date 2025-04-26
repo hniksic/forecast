@@ -126,6 +126,21 @@ def resolve_date(dt, today):
         return today + datetime.timedelta(1)
     return dt
 
+def resolve_time_range(start_date, end_date, timezone):
+    now = datetime.datetime.now(timezone)
+    if now.hour == 23:
+        if start_date == "today":
+            start_date = "tomorrow"
+        if end_date == "today":
+            end_date = "tomorrow"
+    start_date = resolve_date(start_date, now.date())
+    end_date = resolve_date(end_date, now.date())
+    start_time = timezone.localize(datetime.datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0))
+    start_time = max(start_time, now)
+    end_date += datetime.timedelta(1)
+    end_time = timezone.localize(datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0))
+    return start_time, end_time
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and dates.")
     parser.add_argument('place', help="Location name or lat,long pair")
@@ -136,7 +151,7 @@ def main():
 
     place_name, latitude, longitude = resolve_place(args.place)
     try:
-        date_range = parse_date_range(args.dates)
+        start_date, end_date = parse_date_range(args.dates)
     except ValueError as e:
         print(f"{sys.argv[0]}: dates must be YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD, 'today' or 'tomorrow'", file=sys.stderr)
         sys.exit(1)
@@ -147,14 +162,9 @@ def main():
     print(f"Forecast for {place_name} ({explanation})")
 
     in_times, by_model, timezone = download_forecast(latitude, longitude, args.models)
-    now = datetime.datetime.now(timezone)
-    start_date, end_date = tuple(resolve_date(dt, now.date()) for dt in date_range)
-    start_time = timezone.localize(datetime.datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0))
-    start_time = max(start_time, now)
-    end_date += datetime.timedelta(1)
-    end_time = timezone.localize(datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0))
+    time_range = resolve_time_range(start_date, end_date, timezone)
 
-    headers, columns = extract_forecast_table(in_times, by_model, (start_time, end_time), model_to_short)
+    headers, columns = extract_forecast_table(in_times, by_model, time_range, model_to_short)
     pretty_print(headers, *columns)
 
 if __name__ == "__main__":
