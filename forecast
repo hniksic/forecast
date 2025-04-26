@@ -96,7 +96,7 @@ def pretty_print(headers, *data):
         print(" ".join(f"{str(n):>{width}} " for width, n in zip(widths, row)))
 
 def resolve_place(s):
-    if mtch := re.fullmatch(r"(-?\d+\.\d+),(-?\d+\.\d+)", s):
+    if mtch := re.fullmatch(r"( -? \d+ (?:\. \d+)?),(-? \d+ (?:\. \d+)?)", s, re.X):
         latitude, longitude = float(mtch.group(1)), float(mtch.group(2))
         if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
             raise ValueError("Latitude must be between -90 and 90, longitude between -180 and 180")
@@ -107,7 +107,7 @@ def resolve_place(s):
     response.raise_for_status()
     places = response.json()
     if not places:
-        raise ValueError("unknown place")
+        raise ValueError(f"unknown place {s}")
     place = places[0]
     return place['display_name'], float(place['lat']), float(place['lon'])
 
@@ -152,10 +152,18 @@ def main():
     parser.add_argument('place', help="Location name or lat,long pair")
     parser.add_argument('dates', nargs='?', default='today',
                         help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'")
-    parser.add_argument('--models', default='gfs_graphcast025,ecmwf_ifs025', type=lambda s: s.split(','), help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025")
+    parser.add_argument('--models', default='gfs_graphcast025,ecmwf_ifs025',
+                        type=lambda s: s.split(','),
+                        help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025")
+    parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
-    place_name, latitude, longitude = resolve_place(args.place)
+    try:
+        place_name, latitude, longitude = resolve_place(args.place)
+    except ValueError as e:
+        print(f"{sys.argv[0]}: {e}", file=sys.stderr)
+        sys.exit(1)
+
     try:
         start_date, end_date = parse_date_range(args.dates)
     except ValueError as e:
@@ -169,6 +177,11 @@ def main():
 
     in_times, by_model, timezone = download_forecast(latitude, longitude, args.models)
     time_range = resolve_time_range(start_date, end_date, timezone)
+
+    if args.verbose:
+        print(f"Location: {latitude},{longitude} https://www.google.com/maps/place/{latitude},{longitude}")
+        print(f"Timezone: {timezone}")
+        print(f"Interval: [{time_range[0]}, {time_range[1]})")
 
     headers, columns = extract_forecast_table(in_times, by_model, time_range, model_to_short)
     pretty_print(headers, *columns)
