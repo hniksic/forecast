@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import argparse, re, sys, requests, datetime, pytz
+import argparse, itertools, re, sys, requests, datetime, pytz
 
-def download_forecast(latitude, longitude, model):
+def download_forecast(latitude, longitude, models):
     params = {
         'latitude': latitude,
         'longitude': longitude,
         'hourly': 'temperature_2m,precipitation',
-        'models': model,
+        'models': ','.join(models),
         'forecast_days': 16,
         'timezone': 'auto',
     }
@@ -16,33 +16,70 @@ def download_forecast(latitude, longitude, model):
     response.raise_for_status()
     data = response.json()
 
-    times = data['hourly']['time']
-    temperatures = data['hourly']['temperature_2m']
-    precipitations = data['hourly']['precipitation']
-
     timezone = pytz.timezone(data['timezone'])
-    now = datetime.datetime.now(timezone)
+    times = [timezone.localize(datetime.datetime.fromisoformat(time)) for time in data['hourly']['time']]
 
-    return times, temperatures, precipitations, timezone, now
+    propname = lambda prop, model: prop if len(models) == 1 else f'{prop}_{model}'
+    forecast = {
+        model: (data['hourly'][propname('temperature_2m', model)],
+                data['hourly'][propname('precipitation', model)])
+        for model in models
+    }
 
-def filter_for_date(times, temperatures, precipitations, timezone, now, requested_date):
-    if requested_date == "today":
-        requested_date = now.date()
-    elif requested_date == "tomorrow":
-        requested_date = now.date() + datetime.timedelta(1)
+    return times, forecast, timezone
 
-    out_times = []
-    out_temps = []
-    out_precips = []
-    for time, temp, precip in zip(times, temperatures, precipitations):
-        if temp is None:
-            continue # stepped outside the forecast
-        tm = timezone.localize(datetime.datetime.fromisoformat(time))
-        if tm.date() == requested_date and tm > now:
-            out_times.append(tm)
-            out_temps.append(temp)
-            out_precips.append(precip)
-    return out_times, out_temps, out_precips
+# assert dedup(["foo", "foo", "foo", "bar", "bar", "baz"]) == ["foo", "", "", "bar", "", "baz"]
+def dedup(iterable):
+    return ["" if i > 0 else k for k, g in itertools.groupby(iterable) for i in range(len(list(g)))]
+
+def extract_forecast_table(times, by_model, time_range, model_to_short):
+    start_time, end_time = time_range
+    in_range = lambda dt: start_time <= dt < end_time
+
+    headers = ["Date", "Hour"]
+    columns = []
+    columns.append(dedup(dt.date() for dt in times if in_range(dt)))
+    columns.append([dt.strftime('%H') for dt in times if in_range(dt)])
+
+    for model, data in by_model.items():
+        temps, precips = [], []
+        for time, temp, precip in zip(times, *data):
+            if not in_range(time):
+                continue
+            temps.append(temp)
+            precips.append(str(precip) if precip != 0 else '0')
+        headers.append(f"T/°C ({model_to_short[model]})")
+        columns.append(temps)
+        headers.append(f"Rain/mm ({model_to_short[model]})")
+        columns.append(precips)
+
+    return headers, columns
+
+#assert shorten(["foo", "bar"]) == ["f", "b"]
+#assert shorten(["foo", "foobar"]) == ["foo", "foob"]
+#assert shorten(["graphcast", "ecmwf", "geo"]) == ["gr", "e", "ge"]
+def shorten(strings):
+    result = [s[0] if s else '' for s in strings]
+    n = len(strings)
+    while True:
+        seen = {}
+        duplicates = set()
+        for i, s in enumerate(result):
+            if s in seen:
+                duplicates.add(i)
+                duplicates.add(seen[s])
+            else:
+                seen[s] = i
+        if not duplicates:
+            break
+        # For each string with duplicates, try longer prefix
+        for i in duplicates:
+            if len(strings[i]) > len(result[i]):
+                result[i] = strings[i][:len(result[i]) + 1]
+            else:
+                # If at max length, keep as is
+                result[i] = strings[i]
+    return result
 
 def pretty_print(headers, *data):
     data_widths = [max((len(str(n)) for n in column), default=0) for column in data]
@@ -68,50 +105,57 @@ def resolve_place(s):
     place = places[0]
     return place['display_name'], float(place['lat']), float(place['lon'])
 
-def parse_date_range(s):
+def parse_date(s):
     if s in ("today", "tomorrow"):
-        return [s]
+        return s
+    return datetime.datetime.strptime(s, '%Y-%m-%d').date()
+
+def parse_date_range(s):
     if (pos := s.find('..')) != -1:
-        a = datetime.datetime.strptime(s[:pos], '%Y-%m-%d').date()
-        b = datetime.datetime.strptime(s[pos + 2:], '%Y-%m-%d').date()
-        dates = []
-        while a <= b:
-            dates.append(a)
-            a += datetime.timedelta(1)
+        a = parse_date(s[:pos])
+        b = parse_date(s[pos +2:])
+        return a, b
     else:
-        dates = [datetime.datetime.strptime(s, '%Y-%m-%d').date()]
-    return dates
+        d = parse_date(s)
+        return d, d
+
+def resolve_date(dt, today):
+    if dt == "today":
+        return today
+    if dt == "tomorrow":
+        return today + datetime.timedelta(1)
+    return dt
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and dates.")
     parser.add_argument('place', help="Location name or lat,long pair")
     parser.add_argument('dates', nargs='?', default='today',
                         help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'")
-    parser.add_argument('--model', default='gfs_graphcast025', help="Forecast model to use - e.g. gfs_graphcast025, icon_eu, ecmwf_ifs025")
+    parser.add_argument('--models', default='gfs_graphcast025,ecmwf_ifs025', type=lambda s: s.split(','), help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025")
     args = parser.parse_args()
 
     place_name, latitude, longitude = resolve_place(args.place)
     try:
-        dates = parse_date_range(args.dates)
+        date_range = parse_date_range(args.dates)
     except ValueError as e:
         print(f"{sys.argv[0]}: dates must be YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD, 'today' or 'tomorrow'", file=sys.stderr)
         sys.exit(1)
 
-    print(f"{args.model} forecast for {place_name}")
-    forecast = download_forecast(latitude, longitude, args.model)
-    all_dates, all_times, all_temps, all_precips = [], [], [], []
+    short_models = shorten(args.models)
+    model_to_short = {m: s for m, s in zip(args.models, short_models)}
+    explanation = ", ".join(f"{s}={m}" for m, s in model_to_short.items())
+    print(f"Forecast for {place_name} ({explanation})")
 
-    for date in dates:
-        times, temps, precips = filter_for_date(*forecast, date)
-        all_dates.extend(dt.date() if i == 0 else '' for (i, dt) in enumerate(times))
-        all_times.extend(dt.strftime('%H:%M') for dt in times)
-        all_temps.extend(temps)
-        all_precips.extend('0' if p == 0 else str(p) for p in precips)
+    in_times, by_model, timezone = download_forecast(latitude, longitude, args.models)
+    now = datetime.datetime.now(timezone)
+    start_date, end_date = tuple(resolve_date(dt, now.date()) for dt in date_range)
+    start_time = timezone.localize(datetime.datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0))
+    start_time = max(start_time, now)
+    end_date += datetime.timedelta(1)
+    end_time = timezone.localize(datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0))
 
-    pretty_print(
-        ["Date", "Time", "Temp[°C]", "Rain[mm]"],
-        all_dates, all_times, all_temps, all_precips
-    )
+    headers, columns = extract_forecast_table(in_times, by_model, (start_time, end_time), model_to_short)
+    pretty_print(headers, *columns)
 
 if __name__ == "__main__":
     main()
