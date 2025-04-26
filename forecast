@@ -2,7 +2,7 @@
 
 import argparse, re, sys, requests, datetime, pytz
 
-def get_weather_forecast(latitude, longitude, requested_date, model):
+def download_forecast(latitude, longitude, model):
     params = {
         'latitude': latitude,
         'longitude': longitude,
@@ -22,6 +22,10 @@ def get_weather_forecast(latitude, longitude, requested_date, model):
 
     timezone = pytz.timezone(data['timezone'])
     now = datetime.datetime.now(timezone)
+
+    return times, temperatures, precipitations, timezone, now
+
+def filter_for_date(times, temperatures, precipitations, timezone, now, requested_date):
     if requested_date == "today":
         requested_date = now.date()
     elif requested_date == "tomorrow":
@@ -64,29 +68,49 @@ def resolve_place(s):
     place = places[0]
     return place['display_name'], float(place['lat']), float(place['lon'])
 
-def parse_date(s):
+def parse_date_range(s):
     if s in ("today", "tomorrow"):
-        return s
-    return datetime.datetime.strptime(s, '%Y-%m-%d').date()
+        return [s]
+    if (pos := s.find('..')) != -1:
+        a = datetime.datetime.strptime(s[:pos], '%Y-%m-%d').date()
+        b = datetime.datetime.strptime(s[pos + 2:], '%Y-%m-%d').date()
+        dates = []
+        while a <= b:
+            dates.append(a)
+            a += datetime.timedelta(1)
+    else:
+        dates = [datetime.datetime.strptime(s, '%Y-%m-%d').date()]
+    return dates
 
 def main():
-    parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and date.")
-    parser.add_argument('place', help="Named location or lat,long pair")
-    parser.add_argument('date', nargs='?', default='today', help="Date for the forecast in YYYY-MM-DD format, or 'today' or 'tomorrow'")
+    parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and dates.")
+    parser.add_argument('place', help="Location name or lat,long pair")
+    parser.add_argument('dates', nargs='?', default='today',
+                        help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'")
     parser.add_argument('--model', default='gfs_graphcast025', help="Forecast model to use - e.g. gfs_graphcast025, icon_eu, ecmwf_ifs025")
     args = parser.parse_args()
 
     place_name, latitude, longitude = resolve_place(args.place)
-    date = parse_date(args.date)
+    try:
+        dates = parse_date_range(args.dates)
+    except ValueError as e:
+        print(f"{sys.argv[0]}: dates must be YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD, 'today' or 'tomorrow'", file=sys.stderr)
+        sys.exit(1)
 
     print(f"{args.model} forecast for {place_name}")
-    times, temps, precips = get_weather_forecast(latitude, longitude, date, args.model)
+    forecast = download_forecast(latitude, longitude, args.model)
+    all_dates, all_times, all_temps, all_precips = [], [], [], []
+
+    for date in dates:
+        times, temps, precips = filter_for_date(*forecast, date)
+        all_dates.extend(dt.date() if i == 0 else '' for (i, dt) in enumerate(times))
+        all_times.extend(dt.strftime('%H:%M') for dt in times)
+        all_temps.extend(temps)
+        all_precips.extend('0' if p == 0 else str(p) for p in precips)
+
     pretty_print(
         ["Date", "Time", "Temp[°C]", "Rain[mm]"],
-        [dt.date() if i == 0 else '' for (i, dt) in enumerate(times)],
-        [dt.strftime('%H:%M') for dt in times],
-        temps,
-        list(map("{:g}".format, precips))
+        all_dates, all_times, all_temps, all_precips
     )
 
 if __name__ == "__main__":
