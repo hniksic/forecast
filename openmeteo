@@ -11,7 +11,6 @@ def download_forecast(latitude, longitude, models):
         'forecast_days': 16,
         'timezone': 'auto',
     }
-
     response = requests.get('https://api.open-meteo.com/v1/forecast', params=params)
     response.raise_for_status()
     data = response.json()
@@ -31,6 +30,24 @@ def download_forecast(latitude, longitude, models):
     }
 
     return times, forecast, timezone
+
+def download_current(latitude, longitude):
+    params = {
+        'latitude': latitude,
+        'longitude': longitude,
+        'current': 'temperature_2m,precipitation',
+        'timezone': 'auto',
+    }
+    response = requests.get('https://api.open-meteo.com/v1/forecast', params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    assert data['current_units']['temperature_2m'] == '°C'
+    assert data['current_units']['precipitation'] == 'mm'
+
+    timezone = pytz.timezone(data['timezone'])
+    time = timezone.localize(datetime.datetime.fromisoformat(data['current']['time']))
+    return time, data['current']['temperature_2m'], data['current']['precipitation']
 
 # assert dedup(["foo", "foo", "foo", "bar", "bar", "baz"]) == ["foo", "", "", "bar", "", "baz"]
 def dedup(iterable):
@@ -149,17 +166,7 @@ def resolve_time_range(start_date, end_date, timezone):
     end_time = timezone.localize(datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0))
     return start_time, end_time
 
-def main():
-    parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and dates.")
-    parser.add_argument('location', help="Location name or lat,long pair")
-    parser.add_argument('dates', nargs='?', default='today',
-                        help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'")
-    parser.add_argument('--models', default='gfs_graphcast025,ecmwf_ifs025',
-                        type=lambda s: s.split(','),
-                        help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025")
-    parser.add_argument('-v', '--verbose', action='store_true')
-    args = parser.parse_args()
-
+def do_forecast(args):
     try:
         location_name, latitude, longitude = resolve_location(args.location)
     except ValueError as e:
@@ -187,6 +194,50 @@ def main():
 
     headers, columns = extract_forecast_table(in_times, by_model, time_range, model_to_short)
     pretty_print(headers, *columns)
+
+def do_current(args):
+    try:
+        location_name, latitude, longitude = resolve_location(args.location)
+    except ValueError as e:
+        print(f"{sys.argv[0]}: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Current weather for {location_name}")
+    if args.verbose:
+        print(f"Location: {latitude},{longitude} https://www.google.com/maps/place/{latitude},{longitude}")
+    time, temp, precip = download_current(latitude, longitude)
+    pretty_print(["Time", "T/°C", "Rain/mm"],
+                 [time.strftime("%Y-%m-%d %H:%M")], [temp], ['0' if precip==0 else precip])
+
+def main():
+    parser = argparse.ArgumentParser(description="Fetch weather data from OpenMeteo.")
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    forecast_parser = subparsers.add_parser('forecast', help='Fetch weather forecast for a given location and dates')
+    forecast_parser.add_argument('location', help="Location name or lat,long pair")
+    forecast_parser.add_argument(
+        'dates', nargs='?', default='today',
+        help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'"
+    )
+    forecast_parser.add_argument(
+        '--models', default='gfs_graphcast025,ecmwf_ifs025',
+        type=lambda s: s.split(','),
+        help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025"
+    )
+    forecast_parser.add_argument('-v', '--verbose', action='store_true')
+
+    current_parser = subparsers.add_parser('current', help='Fetch current weather for a given location')
+    current_parser.add_argument('location', help="Location name or lat,long pair")
+    current_parser.add_argument('-v', '--verbose', action='store_true')
+
+    args = parser.parse_args()
+
+    # Test which command was invoked
+    if args.command == 'forecast':
+        do_forecast(args)
+    elif args.command == 'current':
+        do_current(args)
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     main()
