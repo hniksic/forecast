@@ -67,10 +67,6 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
         for time, temp, precip in zip(times, *data):
             if not in_range(time):
                 continue
-            if temp is None:
-                temp = '-'
-            if precip is None:
-                precip = '-'
             temps.append(temp)
             precips.append(str(precip) if precip != 0 else '0')
         headers.append(f"T/°C ({model_to_short[model]})")
@@ -106,13 +102,15 @@ def shorten(strings):
                 result[i] = strings[i]
     return result
 
+def fmt(o):
+    return '-' if o is None else str(o)
+
 def pretty_print(headers, *data):
-    data_widths = [max((len(str(n)) for n in column), default=0) for column in data]
-    header_widths = [len(h) for h in headers]
-    widths = [max(hw, dw) for hw, dw in zip(data_widths, header_widths)]
+    widths = [max((len(str(n)) for n in itertools.chain([h], column)))
+              for h, column in zip(headers, data)]
     print(" ".join(f"{header:<{width}}" for width, header in zip(widths, headers)))
     for row in zip(*data):
-        print(" ".join(f"{str(n):>{width}}" for width, n in zip(widths, row)))
+        print(" ".join(f"{fmt(n):>{width}}" for width, n in zip(widths, row)))
 
 def resolve_location(s):
     if mtch := re.fullmatch(r"( -? \d+ (?:\. \d+)?),(-? \d+ (?:\. \d+)?)", s, re.X):
