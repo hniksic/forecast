@@ -10,74 +10,105 @@ Open-Meteo](https://openmeteo.substack.com/p/exploring-graphcast) since April 20
 
 The program makes it particularly easy to compare forecast data from different models.
 
-## Usage
+## Invocation
 
-The program takes a location and date range, and displays available forecasts.
+`forecast` takes a location and date range:
 
-Location is typically place name such as `London`, `New York`, or more detailed `London,
-Ontario`. Such names are resolved using OpenStreetmap [Nominatim search
+```
+forecast zagreb tomorrow
+```
+
+Location is typically a place name such as `London`, `New York`, or more detailed `London,
+Ontario`. Names are resolved using OpenStreetmap's [Nominatim search
 API](https://nominatim.org/release-docs/develop/api/Search/). You can also directly
-specify coordinates such as `45.8150,15.9819`, in which case the Nominatim lookup will be
-omitted and the coordinates used directly.
+specify geographic coordinate such as pair of latitude and longitude, such as
+`45.8150,15.9819`. In that case the Nominatim lookup will be omitted and the coordinate
+used directly.
 
-The date range is specified as a single date or a beginning and end date. E.g. `today`
-will show today's forecast, `tomorrow` that of tomorrow, and `YYYY-MM-DD` the forecast of
-a particular day in the future (within the 16-day window supported by
-Open-Meteo). `today..tomorrow` does what you'd expect, as does the more general
-`YYYY-MM-DD..YYYY-MM-DD`. If the date range is omitted, today's forecast is shown.
+The date range is specified as a single date or a beginning and end date. `today` will
+show today's forecast, `tomorrow` that of tomorrow, and `YYYY-MM-DD` the forecast of a
+particular day in the future (within the 16-day window supported by Open-Meteo). Range is
+specified as `START..END`, such as `2025-04-27..2025-05-01`. Ranges are inclusive, so the
+range shown would include May 1st.  Combinations like `today..tomorrow` do what you'd
+expect. If the date range argument is omitted altogether, today's forecast is shown.
+
+## Output
+
+The program outputs forecast data as a text table. The first column is the date (with
+consecutive equal dates omitted for readability), followed by hour, and then by
+temperature and precipitation for each forecast model:
+
+```
+$ forecast zagreb today
+Forecast for Grad Zagreb, Hrvatska (g=gfs_graphcast025, e=ecmwf_ifs025)
+Date       Hour T/°C (g) Rain/mm (g) T/°C (e) Rain/mm (e)
+2025-04-27   10     13.5           0     12.9           0
+             11     15.2           0     14.0           0
+             12     16.9           0     15.1           0
+             13     18.2           0     16.3           0
+             14     19.0           0     17.1           0
+             15     19.0           0     17.6           0
+             16     18.8           0     17.9           0
+             17     18.1           0     17.6           0
+             18     17.2           0     16.6           0
+             19     16.4           0     15.2           0
+             20     15.6           0     13.9           0
+             21     14.6           0     13.1           0
+             22     13.6           0     12.4           0
+             23     12.4           0     11.7           0
+```
 
 ## Models
 
-You can use `--models` argument to specify a comma-separated list of forecast models to
-retrieve.  Each model will add two columns, one for temperature and one for precipitation.
-The default is to retrieve and show GraphCast (`gfs_graphcast025`) and classic ECMWF
-(`ecmwf_ifs025`) forecasts.
+You can use the `--models` argument to specify a comma-separated list of forecast models
+to retrieve.  Each model will add two columns, one for temperature and one for
+precipitation.  The default is to retrieve and show GraphCast (`gfs_graphcast025`) and
+classic ECMWF (`ecmwf_ifs025`) forecasts.
 
 Here is the current list of known models, taken from [the
 documentation](https://open-meteo.com/en/docs). Note that not all of those work on all
 locations, and many of them don't support full 16 days.
 
 * `best_match`
-* `ecmwf_ifs025`
-* `ecmwf_aifs025_single`
-* `cma_grapes_global`
 * `bom_access_global`
-* `gfs_seamless`
-* `gfs_global`
-* `gfs_hrrr`
-* `ncep_nbm_conus`
-* `gfs_graphcast025`
-* `jma_seamless`
-* `jma_msm`
-* `jma_gsm`
-* `kma_seamless`
-* `kma_ldps`
-* `kma_gdps`
-* `icon_seamless`
-* `icon_global`
-* `icon_eu`
-* `icon_d2`
-* `gem_seamless`
+* `cma_grapes_global`
+* `dmi_harmonie_arome_europe`
+* `dmi_seamless`
+* `ecmwf_aifs025_single`
+* `ecmwf_ifs025`
 * `gem_global`
-* `gem_regional`
 * `gem_hrdps_continental`
-* `meteofrance_seamless`
-* `meteofrance_arpege_world`
-* `meteofrance_arpege_europe`
-* `meteofrance_arome_france`
-* `meteofrance_arome_france_hd`
+* `gem_regional`
+* `gem_seamless`
+* `gfs_global`
+* `gfs_graphcast025`
+* `gfs_hrrr`
+* `gfs_seamless`
+* `icon_d2`
+* `icon_eu`
+* `icon_global`
+* `icon_seamless`
 * `italia_meteo_arpae_icon_2i`
-* `metno_seamless`
-* `metno_nordic`
-* `knmi_seamless`
+* `jma_gsm`
+* `jma_msm`
+* `jma_seamless`
+* `kma_gdps`
+* `kma_ldps`
+* `kma_seamless`
 * `knmi_harmonie_arome_europe`
 * `knmi_harmonie_arome_netherlands`
-* `dmi_seamless`
-* `dmi_harmonie_arome_europe`
-* `ukmo_seamless`
+* `knmi_seamless`
+* `meteofrance_arome_france_hd`
+* `meteofrance_arome_france`
+* `meteofrance_arpege_europe`
+* `meteofrance_arpege_world`
+* `meteofrance_seamless`
+* `metno_nordic`
+* `metno_seamless`
+* `ncep_nbm_conus`
 * `ukmo_global_deterministic_10km`
+* `ukmo_seamless`
 * `ukmo_uk_deterministic_2km`
-
 
 ## Examples
 
