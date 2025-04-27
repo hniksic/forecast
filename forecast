@@ -95,7 +95,7 @@ def pretty_print(headers, *data):
     for row in zip(*data):
         print(" ".join(f"{str(n):>{width}} " for width, n in zip(widths, row)))
 
-def resolve_place(s):
+def resolve_location(s):
     if mtch := re.fullmatch(r"( -? \d+ (?:\. \d+)?),(-? \d+ (?:\. \d+)?)", s, re.X):
         latitude, longitude = float(mtch.group(1)), float(mtch.group(2))
         if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
@@ -105,11 +105,11 @@ def resolve_place(s):
                             params={'q': s, 'format': 'jsonv2'},
                             headers={'User-Agent': 'curl/8.9.1'})
     response.raise_for_status()
-    places = response.json()
-    if not places:
-        raise ValueError(f"unknown place {s}")
-    place = places[0]
-    return place['display_name'], float(place['lat']), float(place['lon'])
+    locations = response.json()
+    if not locations:
+        raise ValueError(f"unknown location {s}")
+    location = locations[0]
+    return location['display_name'], float(location['lat']), float(location['lon'])
 
 def parse_date(s):
     if s in ("today", "tomorrow"):
@@ -149,7 +149,7 @@ def resolve_time_range(start_date, end_date, timezone):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather forecast from OpenMeteo API for a given location and dates.")
-    parser.add_argument('place', help="Location name or lat,long pair")
+    parser.add_argument('location', help="Location name or lat,long pair")
     parser.add_argument('dates', nargs='?', default='today',
                         help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'")
     parser.add_argument('--models', default='gfs_graphcast025,ecmwf_ifs025',
@@ -159,7 +159,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        place_name, latitude, longitude = resolve_place(args.place)
+        location_name, latitude, longitude = resolve_location(args.location)
     except ValueError as e:
         print(f"{sys.argv[0]}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -173,7 +173,7 @@ def main():
     short_models = shorten(args.models)
     model_to_short = {m: s for m, s in zip(args.models, short_models)}
     explanation = ", ".join(f"{s}={m}" for m, s in model_to_short.items())
-    print(f"Forecast for {place_name} ({explanation})")
+    print(f"Forecast for {location_name} ({explanation})")
 
     in_times, by_model, timezone = download_forecast(latitude, longitude, args.models)
     time_range = resolve_time_range(start_date, end_date, timezone)
