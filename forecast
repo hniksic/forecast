@@ -91,9 +91,9 @@ def pretty_print(headers, *data):
     data_widths = [max((len(str(n)) for n in column), default=0) for column in data]
     header_widths = [len(h) for h in headers]
     widths = [max(hw, dw) for hw, dw in zip(data_widths, header_widths)]
-    print(" ".join(f"{header:<{width}} " for width, header in zip(widths, headers)))
+    print(" ".join(f"{header:<{width}}" for width, header in zip(widths, headers)))
     for row in zip(*data):
-        print(" ".join(f"{str(n):>{width}} " for width, n in zip(widths, row)))
+        print(" ".join(f"{str(n):>{width}}" for width, n in zip(widths, row)))
 
 def resolve_location(s):
     if mtch := re.fullmatch(r"( -? \d+ (?:\. \d+)?),(-? \d+ (?:\. \d+)?)", s, re.X):
