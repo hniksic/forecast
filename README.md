@@ -24,12 +24,11 @@ specify geographic coordinate such as pair of latitude and longitude, such as
 used directly.
 
 The date range is either a single date or a pair of beginning and end dates separated by
-`..`. `today` will show today's forecast, `tomorrow` that of tomorrow, and `YYYY-MM-DD`
-the forecast of a particular day in the future (within the 16-day window supported by
-Open-Meteo). Range is specified as `START..END`, such as `2025-04-27..2025-05-01`. Ranges
-are inclusive, so the range shown would include May 1st.  Combinations like
-`today..tomorrow` do what you'd expect. If the date range argument is omitted altogether,
-today's forecast is shown.
+`..`. Date can be formatted as `YYYY-MM-DD`, or you can use shorthands `today`,
+`tomorrow`, or a day of the week. Range is specified as `START..END`, such as
+`2025-04-27..2025-05-01` or `mon..thu`. Note that ranges are inclusive, so the range
+`mon..thu` includes Thursday. If the date range argument is omitted altogether, today's
+forecast is shown.
 
 The program outputs forecast as a text table. The first column is the date (with
 consecutive equal dates omitted for readability), followed by hour, and then by

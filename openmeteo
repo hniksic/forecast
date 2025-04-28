@@ -129,7 +129,8 @@ def resolve_location(s):
     return location['display_name'], float(location['lat']), float(location['lon'])
 
 def parse_date(s):
-    if s in ("today", "tomorrow"):
+    s = s.lower()
+    if s in ("today", "tomorrow") or s in DAYS_OF_THE_WEEK:
         return s
     return datetime.datetime.strptime(s, '%Y-%m-%d').date()
 
@@ -142,11 +143,20 @@ def parse_date_range(s):
         d = parse_date(s)
         return d, d
 
+DAYS_OF_THE_WEEK = {
+    'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6,
+    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6,
+}
+
 def resolve_date(dt, today):
     if dt == "today":
         return today
     if dt == "tomorrow":
         return today + datetime.timedelta(1)
+    if (wanted_weekday := DAYS_OF_THE_WEEK.get(dt)) is not None:
+        dt = today
+        while dt.weekday() != wanted_weekday:
+            dt += datetime.timedelta(1)
     return dt
 
 def resolve_time_range(start_date, end_date, timezone):
