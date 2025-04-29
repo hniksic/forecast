@@ -28,8 +28,9 @@ def download_forecast(latitude, longitude, models):
                 data['hourly'][propname('precipitation', model)])
         for model in models
     }
+    location = data['latitude'], data['longitude']
 
-    return times, forecast, timezone
+    return times, forecast, timezone, location
 
 def download_current(latitude, longitude):
     params = {
@@ -47,7 +48,8 @@ def download_current(latitude, longitude):
 
     timezone = pytz.timezone(data['timezone'])
     time = timezone.localize(datetime.datetime.fromisoformat(data['current']['time']))
-    return time, data['current']['temperature_2m'], data['current']['precipitation']
+    location = data['latitude'], data['longitude']
+    return time, data['current']['temperature_2m'], data['current']['precipitation'], location
 
 # assert dedup(["foo", "foo", "foo", "bar", "bar", "baz"]) == ["foo", "", "", "bar", "", "baz"]
 def dedup(iterable):
@@ -192,11 +194,11 @@ def do_forecast(args):
     explanation = ", ".join(f"{s}={m}" for m, s in model_to_short.items())
     print(f"Forecast for {location_name} ({explanation})")
 
-    in_times, by_model, timezone = download_forecast(latitude, longitude, args.models)
+    in_times, by_model, timezone, (f_latitude, f_longitude) = download_forecast(latitude, longitude, args.models)
     time_range = resolve_time_range(start_date, end_date, timezone)
 
     if args.verbose:
-        print(f"Location: {latitude},{longitude} https://www.google.com/maps/place/{latitude},{longitude}")
+        print(f"Grid-cell location: https://www.google.com/maps/place/{f_latitude},{f_longitude}")
         print(f"Timezone: {timezone}")
         print(f"Interval: [{time_range[0]}, {time_range[1]})")
 
@@ -210,9 +212,9 @@ def do_current(args):
         print(f"{sys.argv[0]}: {e}", file=sys.stderr)
         sys.exit(1)
     print(f"Current weather for {location_name}")
+    time, temp, precip, (f_latitude, f_longitude) = download_current(latitude, longitude)
     if args.verbose:
-        print(f"Location: {latitude},{longitude} https://www.google.com/maps/place/{latitude},{longitude}")
-    time, temp, precip = download_current(latitude, longitude)
+        print(f"Grid-cell location: https://www.google.com/maps/place/{f_latitude},{f_longitude}")
     pretty_print(["Time", "T/°C", "Rain/mm"],
                  [time.strftime("%Y-%m-%d %H:%M")], [temp], ['0' if precip==0 else precip])
 
