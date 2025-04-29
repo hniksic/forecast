@@ -150,13 +150,13 @@ DAYS_OF_THE_WEEK = {
     'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6,
 }
 
-def resolve_date(dt, today):
+def resolve_date(dt, today, weekday_start_at):
     if dt == "today":
         return today
     if dt == "tomorrow":
         return today + datetime.timedelta(1)
     if (wanted_weekday := DAYS_OF_THE_WEEK.get(dt)) is not None:
-        dt = today
+        dt = weekday_start_at
         while dt.weekday() != wanted_weekday:
             dt += datetime.timedelta(1)
     return dt
@@ -168,8 +168,8 @@ def resolve_time_range(start_date, end_date, timezone):
             start_date = "tomorrow"
         if end_date == "today":
             end_date = "tomorrow"
-    start_date = resolve_date(start_date, now.date())
-    end_date = resolve_date(end_date, now.date())
+    start_date = resolve_date(start_date, now.date(), now.date())
+    end_date = resolve_date(end_date, now.date(), start_date)
     start_time = timezone.localize(datetime.datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0))
     start_time = max(start_time, now)
     end_date += datetime.timedelta(1)
@@ -224,15 +224,12 @@ def main():
 
     forecast_parser = subparsers.add_parser('forecast', help='Fetch weather forecast for a given location and dates')
     forecast_parser.add_argument('location', help="Location name or lat,long pair")
-    forecast_parser.add_argument(
-        'dates', nargs='?', default='today',
-        help="YYYY-MM-DD (single), YYYY-MM-DD..YYYY-MM-DD (inclusive range), 'today' or 'tomorrow'"
-    )
+    forecast_parser.add_argument('dates', nargs='?', default='today',
+                                 help="YYYY-MM-DD, 'today', 'tomorrow', or weekday, or date1..date2")
     forecast_parser.add_argument(
         '--models', default='gfs_graphcast025,ecmwf_ifs025',
         type=lambda s: s.split(','),
-        help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025"
-    )
+        help="Comma-separated list of forecast models - e.g. gfs_graphcast025,icon_eu,ecmwf_ifs025")
     forecast_parser.add_argument('-v', '--verbose', action='store_true')
 
     current_parser = subparsers.add_parser('current', help='Fetch current weather for a given location')
