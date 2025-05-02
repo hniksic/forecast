@@ -1,6 +1,29 @@
 #!/usr/bin/env python3
 
 import argparse, itertools, re, sys, requests, datetime, pytz
+from dataclasses import dataclass
+from typing import List, Tuple, Dict
+
+@dataclass
+class Weather:
+    temp: float
+    precip: float
+
+@dataclass
+class Coord:
+    latitude: float
+    longitude: float
+
+    def link(self):
+        return f"https://www.google.com/maps/place/{self.latitude},{self.longitude}"
+
+@dataclass
+class Forecast:
+    times: List[datetime.datetime]
+    by_model: Dict[str, List[Weather]]
+    timezone: datetime.tzinfo
+    location: Tuple[float, float]
+
 
 def download_forecast(latitude, longitude, models):
     params = {
@@ -19,18 +42,29 @@ def download_forecast(latitude, longitude, models):
     for model in models:
         assert data['hourly_units'][propname('temperature_2m', model)] == '°C'
         assert data['hourly_units'][propname('precipitation', model)] == 'mm'
+        assert len(data['hourly'][propname('temperature_2m', model)]) == len(data['hourly']['time'])
+        assert len(data['hourly'][propname('precipitation', model)]) == len(data['hourly']['time'])
 
     timezone = pytz.timezone(data['timezone'])
     times = [timezone.localize(datetime.datetime.fromisoformat(time)) for time in data['hourly']['time']]
+    location = Coord(data['latitude'], data['longitude'])
 
-    forecast = {
-        model: (data['hourly'][propname('temperature_2m', model)],
-                data['hourly'][propname('precipitation', model)])
-        for model in models
-    }
-    location = data['latitude'], data['longitude']
+    by_model = {}
+    for model in models:
+        forecast = [Weather(temp, precip)
+                    for temp, precip in zip(data['hourly'][propname('temperature_2m', model)],
+                                            data['hourly'][propname('precipitation', model)])]
+        by_model[model] = forecast
 
-    return times, forecast, timezone, location
+    return Forecast(times, by_model, timezone, location)
+
+
+@dataclass
+class Current:
+    weather: Weather
+    time: datetime.datetime
+    location: Coord
+
 
 def download_current(latitude, longitude):
     params = {
@@ -48,8 +82,10 @@ def download_current(latitude, longitude):
 
     timezone = pytz.timezone(data['timezone'])
     time = timezone.localize(datetime.datetime.fromisoformat(data['current']['time']))
-    location = data['latitude'], data['longitude']
-    return time, data['current']['temperature_2m'], data['current']['precipitation'], location
+    location = Coord(data['latitude'], data['longitude'])
+    weather = Weather(data['current']['temperature_2m'], data['current']['precipitation'])
+    return Current(weather, time, location)
+
 
 # assert dedup(["foo", "foo", "foo", "bar", "bar", "baz"]) == ["foo", "", "", "bar", "", "baz"]
 def dedup(iterable):
@@ -66,11 +102,11 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
 
     for model, data in by_model.items():
         temps, precips = [], []
-        for time, temp, precip in zip(times, *data):
+        for time, weather in zip(times, data):
             if not in_range(time):
                 continue
-            temps.append(temp)
-            precips.append(str(precip) if precip != 0 else '0')
+            temps.append(weather.temp)
+            precips.append(str(weather.precip) if weather.precip != 0 else '0')
         headers.append(f"T/°C ({model_to_short[model]})")
         columns.append(temps)
         headers.append(f"Rain/mm ({model_to_short[model]})")
@@ -194,15 +230,15 @@ def do_forecast(args):
     explanation = ", ".join(f"{s}={m}" for m, s in model_to_short.items())
     print(f"Forecast for {location_name} ({explanation})")
 
-    in_times, by_model, timezone, (f_latitude, f_longitude) = download_forecast(latitude, longitude, args.models)
-    time_range = resolve_time_range(start_date, end_date, timezone)
+    forecast = download_forecast(latitude, longitude, args.models)
+    time_range = resolve_time_range(start_date, end_date, forecast.timezone)
 
     if args.verbose:
-        print(f"Grid-cell location: https://www.google.com/maps/place/{f_latitude},{f_longitude}")
-        print(f"Timezone: {timezone}")
+        print(f"Grid-cell location: {forecast.location.link()}")
+        print(f"Timezone: {forecast.timezone}")
         print(f"Interval: [{time_range[0]}, {time_range[1]})")
 
-    headers, columns = extract_forecast_table(in_times, by_model, time_range, model_to_short)
+    headers, columns = extract_forecast_table(forecast.times, forecast.by_model, time_range, model_to_short)
     pretty_print(headers, *columns)
 
 def do_current(args):
@@ -212,11 +248,13 @@ def do_current(args):
         print(f"{sys.argv[0]}: {e}", file=sys.stderr)
         sys.exit(1)
     print(f"Current weather for {location_name}")
-    time, temp, precip, (f_latitude, f_longitude) = download_current(latitude, longitude)
+    current = download_current(latitude, longitude)
     if args.verbose:
-        print(f"Grid-cell location: https://www.google.com/maps/place/{f_latitude},{f_longitude}")
+        print(f"Grid-cell location: {current.location.link()}")
     pretty_print(["Time", "T/°C", "Rain/mm"],
-                 [time.strftime("%Y-%m-%d %H:%M")], [temp], ['0' if precip==0 else precip])
+                 [current.time.strftime("%Y-%m-%d %H:%M")],
+                 [current.weather.temp],
+                 ['0' if current.weather.precip==0 else current.weather.precip])
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather data from OpenMeteo.")
