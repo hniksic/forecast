@@ -95,7 +95,7 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
     start_time, end_time = time_range
     in_range = lambda dt: start_time <= dt < end_time
 
-    headers = ["Date", "Hour"]
+    headers = ["\nDate", "\nHour"]
     columns = []
     columns.append(dedup(dt.date() for dt in times if in_range(dt)))
     columns.append([dt.strftime('%H') for dt in times if in_range(dt)])
@@ -107,9 +107,9 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
                 continue
             temps.append(weather.temp)
             precips.append('' if weather.precip == 0 else str(weather.precip))
-        headers.append(f"T/°C ({model_to_short[model]})")
+        headers.append(f"{model_to_short[model]}\nT/°C")
         columns.append(temps)
-        headers.append(f"Rain/mm ({model_to_short[model]})")
+        headers.append(f"{model_to_short[model]}\nRain/mm")
         columns.append(precips)
 
     return headers, columns
@@ -144,11 +144,13 @@ def fmt(o):
     return '-' if o is None else str(o)
 
 def pretty_print(headers, *data):
-    widths = [max((len(str(n)) for n in itertools.chain([h], column)))
-              for h, column in zip(headers, data)]
-    print(" ".join(f"{header:<{width}}" for width, header in zip(widths, headers)))
-    for row in zip(*data):
-        print(" ".join(f"{fmt(n):>{width}}" for width, n in zip(widths, row)))
+    headers = [s.split('\n') for s in headers]
+    widths = [max((len(str(n)) for n in itertools.chain(h, c)))
+              for h, c in zip(headers, data)]
+    for header_row in itertools.zip_longest(*headers, fillvalue=''):
+        print(" ".join(f"{s:<{width}}" for width, s in zip(widths, header_row)))
+    for data_row in zip(*data):
+        print(" ".join(f"{fmt(n):>{width}}" for width, n in zip(widths, data_row)))
 
 def resolve_location(s):
     if mtch := re.fullmatch(r"( -? \d+ (?:\. \d+)?),(-? \d+ (?:\. \d+)?)", s, re.X):
