@@ -106,7 +106,7 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
             if not in_range(time):
                 continue
             temps.append(weather.temp)
-            precips.append(str(weather.precip) if weather.precip != 0 else '0')
+            precips.append('' if weather.precip == 0 else str(weather.precip))
         headers.append(f"T/°C ({model_to_short[model]})")
         columns.append(temps)
         headers.append(f"Rain/mm ({model_to_short[model]})")
@@ -254,7 +254,7 @@ def do_current(args):
     pretty_print(["Time", "T/°C", "Rain/mm"],
                  [current.time.strftime("%Y-%m-%d %H:%M")],
                  [current.weather.temp],
-                 ['0' if current.weather.precip==0 else current.weather.precip])
+                 ['' if current.weather.precip==0 else current.weather.precip])
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather data from OpenMeteo.")
