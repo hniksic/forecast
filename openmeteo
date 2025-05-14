@@ -98,7 +98,7 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
     headers = ["\nDate", "\nHour"]
     columns = []
     columns.append(dedup(dt.date() for dt in times if in_range(dt)))
-    columns.append([dt.strftime('%H') for dt in times if in_range(dt)])
+    columns.append([dt.strftime('%Hh') for dt in times if in_range(dt)])
 
     for model, data in by_model.items():
         temps, precips = [], []
@@ -106,9 +106,14 @@ def extract_forecast_table(times, by_model, time_range, model_to_short):
             if not in_range(time):
                 continue
             temps.append(weather.temp)
-            precips.append('' if weather.precip == 0 else str(weather.precip))
+            if weather.precip == 0:
+                precips.append('')
+            elif weather.precip is None:
+                precips.append('-')
+            else:
+                precips.append(weather.precip)
         headers.append(f"{model_to_short[model]}\nT/°C")
-        columns.append(temps)
+        columns.append([f'{t:.0f}°' if t is not None else '-' for t in temps])
         headers.append(f"{model_to_short[model]}\nRain/mm")
         columns.append(precips)
 
@@ -255,8 +260,10 @@ def do_current(args):
         print(f"Grid-cell location: {current.location.link()}")
     pretty_print(["Time", "T/°C", "Rain/mm"],
                  [current.time.strftime("%Y-%m-%d %H:%M")],
-                 [current.weather.temp],
-                 ['' if current.weather.precip==0 else current.weather.precip])
+                 [f'{current.weather.temp:.0f}°'],
+                 ['' if current.weather.precip==0
+                  else '-' if current.weather.precip is None
+                  else current.weather.precip])
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch weather data from OpenMeteo.")
